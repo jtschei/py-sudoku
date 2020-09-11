@@ -10,7 +10,7 @@ class TestSudoku(unittest.TestCase):
             for y in range(0,9):
                 if (x % 3 == 0 and y == 0):
                     v = int(x/3)
-                self.assertTrue(p.set_position(x,y,v % 9 + 1))
+                p.board[x][y] = v % 9 + 1
                 if (not (x == 8 and y == 8)):
                     self.assertFalse(p.is_solved())
                 v = v+1
