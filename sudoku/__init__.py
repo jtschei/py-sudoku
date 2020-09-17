@@ -148,64 +148,76 @@ class Puzzle:
             self.board[x][y] = 0
 
     def solve(self) -> bool:
-        for x in range(0,9):
-            for y in range(0,9):
-                if self.board[x][y] == 0:
-                    p = Puzzle.try_solve(self.board, x, y)
-                    if p is not None:
-                        self.board = Puzzle.copy_board(p.board)
-                        print(self)
-                        logger.info("solved")
-                        return True
-        return False
+        logger.debug("solving puzzle")
+        # get missing coords
+        missing_options = list()
+        for (x, y) in Puzzle.get_empties(self.board):
+            missing_options.append((x, y, Puzzle.get_options(self.board, x, y)))
+        # find the missing coord with fewest options
+        for (x,y,options) in missing_options:
+            if len(options) == 1:
+                logger.debug(f"setting {x},{y} to {options[0]}")
+                self.board[x][y] = options[0]
+        if self.is_solved():
+            return True
+        else:
+            # TODO handle when there are definitive options
+            return self.solve()
 
     @staticmethod
-    def get_next_empty(board: [[]], px: int, py:int) -> (bool,int,int):
+    def get_empties(board: [[]])-> [(int,int)]:
+        empties = list()
         for x in range(0,9):
             for y in range(0,9):
-                if x < px or y < py:
-                    continue
                 if board[x][y] == 0:
-                    return (True,x,y)
-        return (False, None, None)
+                    empties.append((x,y))
+        logger.debug(f"empties are {empties}")
+        return empties
 
     @staticmethod
-    def try_solve(board: [[]], x: int, y:int):
-        logger.debug(f"solving board for {x},{y}")
-        p = Puzzle(board)
-        print(p)
-        xs = p.get_missing_x(y)
-        ys = p.get_missing_y(x)
-        vs = p.get_missing_v(int(x/3),int(y/3))
-        os = list(set(xs) & set(ys) & set(vs))
-
+    def get_options(board: [[]], x: int, y:int) -> []:
+        """
+        for (x,y) that should be empty, return a list of possible values
+        """
+        xs = Puzzle.get_missing_x(board, y)
         logger.debug(f"missing x's = {xs}")
+
+        ys = Puzzle.get_missing_y(board, x)
         logger.debug(f"missing y's = {ys}")
+
+        vs = Puzzle.get_missing_v(board, int(x/3), int(y/3))
         logger.debug(f"missing v's = {vs}")
-        logger.debug(f"missing o's = {os}")
 
-        for o in os:
-            p.board[x][y] = o
-            if p.is_solved():
-                return p
-            else:
-                b, nx, ny = Puzzle.get_next_empty(p.board, x, y)
-                if b:
-                    return Puzzle.try_solve(p.board, nx, ny)
+        options = list(set(xs) & set(ys) & set(vs))
+        logger.debug(f"missing o's = {options}")
 
-    def get_missing_x(self, y: int) -> []:
-        xs = [self.board[x][y] for x in range(0,9)]
+        return options
+
+    @staticmethod
+    def get_missing_x(board: [[]], y: int) -> []:
+        """
+        find values missing along x axis for given y value
+        """
+        xs = [board[x][y] for x in range(0,9)]
         return list(set(Puzzle.vals) - set(xs))
 
-    def get_missing_y(self, x: int) -> []:
-        ys = [self.board[x][y] for y in range(0,9)]
+    @staticmethod
+    def get_missing_y(board: [[]], x: int) -> []:
+        """
+        find values missing along y axis for given x value
+        """
+        ys = [board[x][y] for y in range(0,9)]
         return list(set(Puzzle.vals) - set(ys))
 
-    def get_missing_v(self,box_x: int, box_y:int) -> []:
+    @staticmethod
+    def get_missing_v(board: [[]],box_x: int, box_y:int) -> []:
+        """
+        find values missing within given box(x,y)
+        """
         vs = list()
         for x in range(0,3):
             for y in range(0,3):
-                vs.append(self.board[box_x * 3 + x][box_y * 3 + y])
+                vs.append(board[box_x * 3 + x][box_y * 3 + y])
         return list(set(Puzzle.vals) - set(vs))
 
     def __repr__(self):
@@ -253,13 +265,15 @@ if __name__ == "__main__":
     b.populate_board()
     print(b.is_solved())
     print(b)
-    for x in range(0,10):
+    for x in range(0,20):
         b.shuffle_board()
-        print(b.is_solved())
+        #print(b.is_solved())
     print(b)
-    b.hide_values()
+    b.hide_values(n=70)
     print(b)
     b.solve()
+    print(b)
+    print(b.is_solved())
     #b.board[0][8] = 9
     #print(b)
     #print(b.is_solved())
