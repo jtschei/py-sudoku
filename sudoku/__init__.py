@@ -98,26 +98,31 @@ class Puzzle:
         # valid
         return True
 
-    def shuffle_board(self):
+    def shuffle_board(self,n=1):
         """
-        shuffles a populated board randomizing layout yielding a valid solved puzzle
+        shuffles a populated board n-times randomizing layout yielding a valid solved puzzle
         """
-        logger.debug("shuffling board")
-        # get two positions in each box to swap making sure positions are unique
-        swap1 = self.get_swaps()
-        swap2 = self.get_swaps()
-        while(len(list(set(swap1) & set(swap2))) > 0):
-            logger.debug("reswapping")
+        logger.debug(f"shuffling board {n} times")
+        swap_positions = list()
+        for _ in range(0, n):
+            # get two positions in each box to swap making sure positions are unique
+            swap1 = self.get_swaps()
             swap2 = self.get_swaps()
-        # swap values
-        self.print_swaps(swap1 + swap2)
-        while len(swap1) > 0:
-            (x1,y1) = swap1.pop()
-            (x2,y2) = swap2.pop()
-            v1 = self.board[x1][y1]
-            v2 = self.board[x2][y2]
-            self.board[x1][y1] = v2
-            self.board[x2][y2] = v1
+            while(len(list(set(swap1) & set(swap2))) > 0):
+                logger.debug("reswapping")
+                swap2 = self.get_swaps()
+            # save the swaps so we can print them
+            swap_positions.extend(swap1 + swap2)
+            # swap values
+            while len(swap1) > 0:
+                (x1,y1) = swap1.pop()
+                (x2,y2) = swap2.pop()
+                v1 = self.board[x1][y1]
+                v2 = self.board[x2][y2]
+                self.board[x1][y1] = v2
+                self.board[x2][y2] = v1
+        # print swapped positions
+        self.print_swaps(swap_positions)
 
     def get_swaps(self):
         """
@@ -141,28 +146,59 @@ class Puzzle:
         return spots
 
     def hide_values(self, n=9):
-        for i in range(n):
-            logger.debug(f"removing {i} of {n}")
+        hidden_positions = list()
+        while len(hidden_positions) < n:
+            #logger.debug(f"removing {i} of {n}")
             x = random.randint(0,8)
             y = random.randint(0,8)
-            self.board[x][y] = 0
+            if (x,y) not in hidden_positions:
+                hidden_positions.append((x,y))
+                self.board[x][y] = 0
+        self.print_hidden(hidden_positions)
 
-    def solve(self) -> bool:
-        logger.debug("solving puzzle")
-        # get missing coords
+    def solve(self, l=1) -> bool:
+        """
+        attempts to solve puzzle without guessing
+        """
+        logger.debug(f"solving puzzle ({l})")
+        # get missing coords and capture possible values
         missing_options = list()
         for (x, y) in Puzzle.get_empties(self.board):
             missing_options.append((x, y, Puzzle.get_options(self.board, x, y)))
-        # find the missing coord with fewest options
+        # populate the board's missing spots where there is only one possible value
+        positions = list()
         for (x,y,options) in missing_options:
             if len(options) == 1:
-                logger.debug(f"setting {x},{y} to {options[0]}")
+                #logger.debug(f"setting {x},{y} to {options[0]}")
                 self.board[x][y] = options[0]
+                positions.append((x,y))
+        if len(positions) > 0:
+            self.print_fills(positions) 
+        # test if bored solved
         if self.is_solved():
+            # we're done
             return True
         else:
-            # TODO handle when there are definitive options
-            return self.solve()
+            if len(positions) > 0:
+                return self.solve(l=l)
+            else:
+                return self.guess(l=l)
+
+    def guess(self, l=1):
+        """
+        attempts to solve puzzle with guessing
+        """
+        logger.debug(f"guessing ({l})")
+        # get missing coords and capture possible values
+        for (x, y) in Puzzle.get_empties(self.board):
+            for v in Puzzle.get_options(self.board, x, y):
+                test_puzzle = Puzzle(self.board)
+                test_puzzle.board[x][y] = v
+                test_puzzle.print_guesses([(x,y)])
+                if test_puzzle.solve(l=l+1):
+                    self.board = Puzzle.copy_board(test_puzzle.board)
+                    return True
+        return False
 
     @staticmethod
     def get_empties(board: [[]])-> [(int,int)]:
@@ -171,7 +207,7 @@ class Puzzle:
             for y in range(0,9):
                 if board[x][y] == 0:
                     empties.append((x,y))
-        logger.debug(f"empties are {empties}")
+        #logger.debug(f"empties are {empties}")
         return empties
 
     @staticmethod
@@ -180,16 +216,16 @@ class Puzzle:
         for (x,y) that should be empty, return a list of possible values
         """
         xs = Puzzle.get_missing_x(board, y)
-        logger.debug(f"missing x's = {xs}")
+        #logger.debug(f"missing x's = {xs}")
 
         ys = Puzzle.get_missing_y(board, x)
-        logger.debug(f"missing y's = {ys}")
+        #logger.debug(f"missing y's = {ys}")
 
         vs = Puzzle.get_missing_v(board, int(x/3), int(y/3))
-        logger.debug(f"missing v's = {vs}")
+        #logger.debug(f"missing v's = {vs}")
 
         options = list(set(xs) & set(ys) & set(vs))
-        logger.debug(f"missing o's = {options}")
+        #logger.debug(f"missing options for {x},{y} = {options}")
 
         return options
 
@@ -224,37 +260,42 @@ class Puzzle:
         return str(self.board)
 
     def __str__(self):
-        data = [] # type: List[str]
-        data.append("|" + "-" * 29 + "|")
-        for y in range(8,-1,-1):
-            row = "|"
-            for x in range (0,9):
-                row += " " + str(self.board[x][y]) + " "
-                if (x + 1) % 3 == 0:
-                    row += "|"
-            data.append(row)
-            if y % 3 == 0:
-                data.append("|" + "-" * 29 + "|")
-        return "\n".join(data)
+        return self.draw_positions(Fore.WHITE, [])
 
     def print_board(self):
-        return str(self)
+        logger.debug("print board")
+        print(self.draw_positions(Fore.WHITE, []))
 
-    def print_swaps(self, swaps):
+    def print_swaps(self, swaps: []):
         logger.debug("print swaps")
-        data = [] # type: List[str]
+        print(self.draw_positions(Fore.GREEN, swaps))
+
+    def print_hidden(self, hidden: []):
+        logger.debug("print hidden")
+        print(self.draw_positions(Fore.MAGENTA, hidden))
+
+    def print_guesses(self, guesses: []):
+        logger.debug("print guesses")
+        print(self.draw_positions(Fore.RED, guesses))
+
+    def print_fills(self, fills: []):
+        logger.debug("print fills")
+        print(self.draw_positions(Fore.CYAN, fills))
+
+    def draw_positions(self, mod_color, positions) -> str:
+        data = list()
         data.append("|" + "-" * 29 + "|")
         for y in range(8,-1,-1):
             row = "|"
             for x in range (0,9):
-                color = Fore.GREEN if (x,y) in swaps else Fore.WHITE
+                color = mod_color if (x,y) in positions else Fore.WHITE
                 row += " " + color + str(self.board[x][y]) + Fore.RESET + " "
                 if (x + 1) % 3 == 0:
                     row += "|"
             data.append(row)
             if y % 3 == 0:
                 data.append("|" + "-" * 29 + "|")
-        print("\n".join(data))
+        return "\n".join(data)
 
 
 if __name__ == "__main__":
@@ -263,17 +304,12 @@ if __name__ == "__main__":
     b = Puzzle()
     b.initialize_board()
     b.populate_board()
-    print(b.is_solved())
-    print(b)
-    for x in range(0,20):
-        b.shuffle_board()
-        #print(b.is_solved())
-    print(b)
-    b.hide_values(n=70)
-    print(b)
-    b.solve()
     print(b)
     print(b.is_solved())
+    b.shuffle_board(n=18)
+    print(b.is_solved())
+    b.hide_values(n=50)
+    print(b.solve())
     #b.board[0][8] = 9
     #print(b)
     #print(b.is_solved())
