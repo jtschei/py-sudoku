@@ -156,11 +156,11 @@ class Puzzle:
                 self.board[x][y] = 0
         self.print_hidden(hidden_positions)
 
-    def solve(self, l=1) -> bool:
+    def solve(self, rlevel=1) -> bool:
         """
         attempts to solve puzzle without guessing
         """
-        logger.debug(f"solving puzzle ({l})")
+        logger.debug(f"solving puzzle ({rlevel})")
         # get missing coords and capture possible values
         missing_options = list()
         for (x, y) in Puzzle.get_empties(self.board):
@@ -170,8 +170,10 @@ class Puzzle:
         for (x,y,options) in missing_options:
             if len(options) == 1:
                 #logger.debug(f"setting {x},{y} to {options[0]}")
+                # TODO this is buggy as it will set the same value in two squares in same box
                 self.board[x][y] = options[0]
                 positions.append((x,y))
+        # test if we filled any positions
         if len(positions) > 0:
             self.print_fills(positions) 
         # test if bored solved
@@ -179,23 +181,43 @@ class Puzzle:
             # we're done
             return True
         else:
+            # test if we updated any positions
             if len(positions) > 0:
-                return self.solve(l=l)
+                # since we updated some spots lets recheck for new options
+                return self.solve(rlevel=rlevel)
             else:
-                return self.guess(l=l)
+                # there were no positions filled but board is not solved so guess
+                return self.guess(rlevel=rlevel)
 
-    def guess(self, l=1):
+    def guess(self, rlevel=1):
         """
-        attempts to solve puzzle with guessing
+        attempt to solve puzzle with guessing
         """
-        logger.debug(f"guessing ({l})")
+        logger.debug(f"guessing ({rlevel})")
+        # sorting function to order by least amount of options
+        def get_option_len(elem):
+            return len(elem[2])
         # get missing coords and capture possible values
+        options = list()
         for (x, y) in Puzzle.get_empties(self.board):
-            for v in Puzzle.get_options(self.board, x, y):
+            options.append((x, y, Puzzle.get_options(self.board, x, y)))
+        # sort the options by amount of possible values
+        options.sort(key=get_option_len)
+        # test if the smallest option has any possible values
+        if len(options[0][2]) == 0:
+            # the puzzle is not solveable
+            return False
+        # iterate throught the options for x,y
+        for (x,y,vs) in options:
+            # iterate the possible values
+            for v in vs:
+                # build copy of board
                 test_puzzle = Puzzle(self.board)
+                # plugin in value
                 test_puzzle.board[x][y] = v
                 test_puzzle.print_guesses([(x,y)])
-                if test_puzzle.solve(l=l+1):
+                # try to solve with new value in place and increase recursion level
+                if test_puzzle.solve(rlevel=rlevel+1):
                     self.board = Puzzle.copy_board(test_puzzle.board)
                     return True
         return False
@@ -308,7 +330,7 @@ if __name__ == "__main__":
     print(b.is_solved())
     b.shuffle_board(n=18)
     print(b.is_solved())
-    b.hide_values(n=50)
+    b.hide_values(n=60)
     print(b.solve())
     #b.board[0][8] = 9
     #print(b)
